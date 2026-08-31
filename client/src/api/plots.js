@@ -1,5 +1,6 @@
 const BASE_URL = 'https://karachi-real-estate-api.bonto.run/api/plots';
 
+
 async function handleResponse(res) {
   if (!res.ok) {
     let message = `Request failed with status ${res.status}`;
