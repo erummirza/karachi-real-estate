@@ -1,4 +1,4 @@
-const BASE_URL = '/api/plots';
+const BASE_URL = 'https://karachi-real-estate-api.bonto.run/api/plots';
 
 async function handleResponse(res) {
   if (!res.ok) {
