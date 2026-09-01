@@ -1,4 +1,4 @@
-const BASE_URL = 'https://karachi-real-estate-api.bonto.run/api/plots';
+const BASE_URL = 'https://karachi-real-estate-api.vercel.app/api/plots';
 
 
 async function handleResponse(res) {
