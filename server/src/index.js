@@ -11,21 +11,21 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Ensure MongoDB is connected before handling any request
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    res.status(500).json({ error: 'Database connection failed' });
+  }
+});
+
 app.use('/api/plots', plotsRouter);
 app.use('/api/parse-inventory', parseInventoryRouter);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
-});
-
-// Connect to MongoDB once, reused across serverless invocations
-let isConnected = false;
-app.use(async (req, res, next) => {
-  if (!isConnected) {
-    await connectDB();
-    isConnected = true;
-  }
-  next();
 });
 
 // Only run a local server when NOT on Vercel
