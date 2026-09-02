@@ -11,7 +11,10 @@ import { ImportModal } from './components/ImportModal';
 import { OfferModal } from './components/OfferModal';
 import { PlotDetailModal } from './components/PlotDetailModal';
 import { WhatsAppExportModal } from './components/WhatsAppExportModal';
-import { Building2, PlusCircle, RotateCcw, HandCoins, Share2 } from 'lucide-react';
+import { AgentRegistrationModal } from './components/AgentRegistrationModal';
+import { AdminLoginModal } from './components/AdminLoginModal';
+import { AdminPanel } from './components/AdminPanel';
+import { Building2, PlusCircle, RotateCcw, HandCoins, Share2, UserPlus, ShieldCheck } from 'lucide-react';
 export default function App() {
   // Plots state is loaded from the API (backed by MongoDB) instead of localStorage
   const [plots, setPlots] = useState([]);
@@ -57,6 +60,10 @@ export default function App() {
   // Modal controls
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isAgentRegistrationOpen, setIsAgentRegistrationOpen] = useState(false);
+  const [isAdminLoginOpen, setIsAdminLoginOpen] = useState(false);
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [plotForOffer, setPlotForOffer] = useState(null);
   const [plotForDetail, setPlotForDetail] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
@@ -122,6 +129,19 @@ export default function App() {
       console.error('Failed to update offer status:', e);
       showToast(e.message || 'Failed to update offer. Please try again.');
     }
+  };
+
+  // Admin login success - opens the admin panel
+  const handleAdminLoginSuccess = () => {
+    setIsAdminAuthenticated(true);
+    setIsAdminLoginOpen(false);
+    setIsAdminPanelOpen(true);
+  };
+
+  // Admin logout - closes the panel and clears the session
+  const handleAdminLogout = () => {
+    setIsAdminAuthenticated(false);
+    setIsAdminPanelOpen(false);
   };
 
   // Share on WhatsApp
@@ -279,6 +299,16 @@ export default function App() {
             <button onClick={() => setIsExportOpen(true)} className="text-slate-300 hover:underline font-semibold">
               Export WhatsApp Message
             </button>
+            <span>•</span>
+            <button id="register-agent-btn" onClick={() => setIsAgentRegistrationOpen(true)} className="text-indigo-400 hover:underline font-semibold flex items-center gap-1">
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Register as Agent</span>
+            </button>
+            <span>•</span>
+            <button id="admin-login-btn" onClick={() => isAdminAuthenticated ? setIsAdminPanelOpen(true) : setIsAdminLoginOpen(true)} className="text-amber-400 hover:underline font-semibold flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Admin</span>
+            </button>
           </div>
         </div>
       </footer>
@@ -294,6 +324,12 @@ export default function App() {
     }} onShareWhatsApp={handleShareWhatsApp} onUpdateOfferStatus={handleUpdateOfferStatus} />
 
       <WhatsAppExportModal plots={filteredPlots} isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} />
+
+      <AgentRegistrationModal isOpen={isAgentRegistrationOpen} onClose={() => setIsAgentRegistrationOpen(false)} />
+
+      <AdminLoginModal isOpen={isAdminLoginOpen} onClose={() => setIsAdminLoginOpen(false)} onLoginSuccess={handleAdminLoginSuccess} />
+
+      <AdminPanel isOpen={isAdminPanelOpen} onClose={() => setIsAdminPanelOpen(false)} onLogout={handleAdminLogout} />
 
     </div>;
 }
