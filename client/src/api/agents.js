@@ -1,4 +1,5 @@
-const BASE_URL = '/api/agents';
+//const BASE_URL = '/api/agents';
+const BASE_URL = 'https://karachi-real-estate-api.vercel.app/api/agents';
 
 async function handleResponse(res) {
   if (!res.ok) {
