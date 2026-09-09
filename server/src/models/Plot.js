@@ -52,6 +52,10 @@ const PlotSchema = new Schema(
     rawText: { type: String },
     createdAt: { type: String, required: true },
     offers: { type: [OfferSchema], default: [] },
+    // Identifies which logged-in agent account added this listing.
+    // null = added by an admin (or before this feature existed).
+    ownerAgentId: { type: String, default: null },
+    ownerAgentName: { type: String, default: null },
   },
   { versionKey: false }
 );

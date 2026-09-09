@@ -1,5 +1,5 @@
-const BASE_URL = 'https://karachi-real-estate-api.vercel.app/api/plots';
-
+// const BASE_URL = 'https://karachi-real-estate-api.vercel.app/api/plots'; // PRODUCTION - uncomment before deploying
+const BASE_URL = 'http://localhost:5000/api/plots'; // LOCAL - for testing only
 
 async function handleResponse(res) {
   if (!res.ok) {
@@ -15,18 +15,26 @@ async function handleResponse(res) {
   return res.json();
 }
 
-/** Fetch all plots. */
-export async function getPlots() {
-  const res = await fetch(BASE_URL);
+/**
+ * Fetch plots. Pass an ownerAgentId to get only that agent's own listings
+ * (used by the agent dashboard); omit it to get everything (admin view).
+ */
+export async function getPlots(ownerAgentId) {
+  const url = ownerAgentId ? `${BASE_URL}?ownerAgentId=${encodeURIComponent(ownerAgentId)}` : BASE_URL;
+  const res = await fetch(url);
   return handleResponse(res);
 }
 
-/** Import a batch of newly parsed plots. Returns the inserted plots. */
-export async function importPlots(items) {
+/**
+ * Import a batch of newly parsed plots. Pass `owner` as
+ * { ownerAgentId, ownerAgentName } when an agent (not admin) is importing,
+ * so the new listings are tagged to their account.
+ */
+export async function importPlots(items, owner) {
   const res = await fetch(`${BASE_URL}/import`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items }),
+    body: JSON.stringify({ items, ...(owner || {}) }),
   });
   return handleResponse(res);
 }

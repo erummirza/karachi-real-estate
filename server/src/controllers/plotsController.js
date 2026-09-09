@@ -1,9 +1,14 @@
 import { Plot } from '../models/Plot.js';
 
-/** GET /api/plots */
+/**
+ * GET /api/plots
+ * GET /api/plots?ownerAgentId=xyz  -> only that agent's own listings
+ */
 export async function getAllPlots(req, res) {
   try {
-    const plots = await Plot.find().sort({ createdAt: -1 });
+    const { ownerAgentId } = req.query;
+    const query = ownerAgentId ? { ownerAgentId } : {};
+    const plots = await Plot.find(query).sort({ createdAt: -1 });
     res.json(plots);
   } catch (err) {
     console.error('Failed to fetch plots:', err);
@@ -11,16 +16,27 @@ export async function getAllPlots(req, res) {
   }
 }
 
-/** POST /api/plots/import */
+/**
+ * POST /api/plots/import
+ * Body: { items: [...], ownerAgentId?, ownerAgentName? }
+ * When ownerAgentId is provided, every inserted plot is tagged with it so the
+ * agent can later be shown only their own listings.
+ */
 export async function importPlots(req, res) {
   try {
-    const { items } = req.body;
+    const { items, ownerAgentId, ownerAgentName } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'items must be a non-empty array' });
     }
 
-    const inserted = await Plot.insertMany(items, { ordered: false });
+    const itemsWithOwner = items.map(item => ({
+      ...item,
+      ownerAgentId: ownerAgentId || null,
+      ownerAgentName: ownerAgentName || null,
+    }));
+
+    const inserted = await Plot.insertMany(itemsWithOwner, { ordered: false });
     res.status(201).json(inserted);
   } catch (err) {
     console.error('Failed to import plots:', err);
@@ -72,7 +88,7 @@ export async function updateOfferStatus(req, res) {
       return res.status(404).json({ error: 'Plot not found' });
     }
 
-    const offer = plot.offers.find((o) => o.id === offerId);
+    const offer = plot.offers.find(o => o.id === offerId);
     if (!offer) {
       return res.status(404).json({ error: 'Offer not found' });
     }
