@@ -1,5 +1,5 @@
-// const BASE_URL = 'https://karachi-real-estate-api.vercel.app/api/plots'; // PRODUCTION - uncomment before deploying
-const BASE_URL = 'http://localhost:5000/api/plots'; // LOCAL - for testing only
+ const BASE_URL = 'https://karachi-real-estate-api.vercel.app/api/plots'; // PRODUCTION - uncomment before deploying
+//const BASE_URL = 'http://localhost:5000/api/plots'; // LOCAL - for testing only
 
 async function handleResponse(res) {
   if (!res.ok) {
