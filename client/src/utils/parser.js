@@ -57,14 +57,28 @@ export function formatPkrDisplay(amountInPkr) {
  * Parse price string (e.g. "85 lacs", "1.85 cr", "95L", "8.5 crore") into numeric PKR
  */
 export function parsePriceToPkr(text) {
-  const clean = text.toLowerCase().trim();
+  const clean = text
+    .toLowerCase()
+    .trim();
 
-  // Check Crores
-  const croreMatch = clean.match(/([\d.]+)\s*(cr|crore|crores)/i);
+  // ------------------------------------------------------------
+  // Crores
+  // 1.55 cr
+  // 1.55 crore
+  // 2 crores
+  // ------------------------------------------------------------
+  const croreMatch = clean.match(
+    /([\d.]+)\s*(cr|crore|crores)\b/i
+  );
+
   if (croreMatch) {
     const val = parseFloat(croreMatch[1]);
+
     if (!isNaN(val)) {
-      const pkr = Math.round(val * 10000000);
+      const pkr = Math.round(
+        val * 10000000
+      );
+
       return {
         pkr,
         display: formatPkrDisplay(pkr)
@@ -72,12 +86,25 @@ export function parsePriceToPkr(text) {
     }
   }
 
-  // Check Lacs / Lakhs / L
-  const lacMatch = clean.match(/([\d.]+)\s*(lac|lacs|lakh|lakhs|l)\b/i);
+  // ------------------------------------------------------------
+  // Lacs / Lakhs
+  // 21 lac
+  // 21 lacs
+  // 27 lakh
+  // 95L
+  // ------------------------------------------------------------
+  const lacMatch = clean.match(
+    /([\d.]+)\s*(lac|lacs|lakh|lakhs|l)\b/i
+  );
+
   if (lacMatch) {
     const val = parseFloat(lacMatch[1]);
+
     if (!isNaN(val)) {
-      const pkr = Math.round(val * 100000);
+      const pkr = Math.round(
+        val * 100000
+      );
+
       return {
         pkr,
         display: formatPkrDisplay(pkr)
@@ -85,15 +112,61 @@ export function parsePriceToPkr(text) {
     }
   }
 
-  // Check raw numbers (e.g. 8500000)
-  const numMatch = clean.match(/(\d{6,10})/);
+  // ------------------------------------------------------------
+  // Raw PKR
+  // 8500000
+  // 15500000
+  // ------------------------------------------------------------
+  const numMatch = clean.match(
+    /\b(\d{6,10})\b/
+  );
+
   if (numMatch) {
-    const pkr = parseInt(numMatch[1], 10);
+    const pkr = parseInt(
+      numMatch[1],
+      10
+    );
+
     return {
       pkr,
       display: formatPkrDisplay(pkr)
     };
   }
+
+  // ------------------------------------------------------------
+  // OPTIONAL:
+  // If your inventory convention is that a standalone decimal
+  // such as "1.55" means crore, enable this.
+  //
+  // Example:
+  // "P4 Road 4-A Allotment 512sq 230s 1.55"
+  //                    => 1.55 Cr
+  // ------------------------------------------------------------
+  const standaloneDecimal = clean.match(
+    /(?:^|\s)(\d+\.\d{1,2})(?:\s|$)/
+  );
+
+  if (standaloneDecimal) {
+    const val = parseFloat(
+      standaloneDecimal[1]
+    );
+
+    if (
+      !isNaN(val) &&
+      val >= 0.1 &&
+      val <= 100
+    ) {
+      const pkr = Math.round(
+        val * 10000000
+      );
+
+      return {
+        pkr,
+        display: formatPkrDisplay(pkr)
+      };
+    }
+  }
+
   return {
     pkr: 0,
     display: 'Price on Call'
@@ -103,168 +176,717 @@ export function parsePriceToPkr(text) {
 /**
  * Rule-based fallback parser for real estate text lines in Karachi
  */
+/**
+ * Rule-based fallback parser for real estate text lines in Karachi
+ *
+ * Supports:
+ * - Bahria Town Karachi / BTK
+ * - P1 ... P63
+ * - Alphanumeric precincts such as P15A
+ * - DHA City Karachi / DCK sectors
+ * - DHA Karachi phases
+ * - Plot numbers such as 240S, 1470S, 230S, 160S
+ * - Road numbers without confusing them with plot numbers
+ * - Commercial / file listings without a plot number
+ */
 export function parseInventoryTextClient(rawText) {
-  const rawLines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const rawLines = rawText
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(Boolean);
+
   const results = [];
 
-  // Extract block-level global contact phone if available
-  const globalPhoneMatch = rawText.match(/(03\d{2}[- ]?\d{7}|\+92\s*3\d{2}[- ]?\d{7})/);
-  const globalPhone = globalPhoneMatch ? globalPhoneMatch[0] : '';
+  // ------------------------------------------------------------
+  // Global contact phone
+  // ------------------------------------------------------------
+  const globalPhoneMatch = rawText.match(
+    /(03\d{2}[- ]?\d{7}|\+92\s*3\d{2}[- ]?\d{7})/
+  );
+
+  const globalPhone = globalPhoneMatch
+    ? globalPhoneMatch[0]
+    : '';
+
+  // ------------------------------------------------------------
+  // Current context
+  // ------------------------------------------------------------
   let currentSociety = 'BTK';
   let currentPrecinctOrSector = 'P1';
   let currentLocation = 'Precinct 1';
+
+  // ------------------------------------------------------------
+  // Helper: normalize precinct
+  // P15a -> P15A
+  // 15a  -> P15A
+  // ------------------------------------------------------------
+  const normalizeBtkPrecinct = value => {
+    if (!value) return '';
+
+    const clean = String(value)
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, '');
+
+    const match = clean.match(/^P?(\d+[A-Z]?)$/);
+
+    if (match) {
+      return `P${match[1]}`;
+    }
+
+    return clean;
+  };
+
+  // ------------------------------------------------------------
+  // Helper: extract BTK precinct
+  //
+  // Handles:
+  // P23
+  // P15a
+  // p31
+  // Precinct 16
+  // Precinct P16
+  // ------------------------------------------------------------
+  const extractBtkPrecinct = line => {
+    if (!line) return null;
+
+    let match = line.match(
+      /\bprecinct\s*[-:]?\s*p?(\d+[a-z]?)\b/i
+    );
+
+    if (match) {
+      return normalizeBtkPrecinct(match[1]);
+    }
+
+    // IMPORTANT:
+    // P15a must be recognized even though there is no space
+    // between P and 15a.
+    match = line.match(
+      /(?:^|[\s,;(])p\s*[-:]?\s*(\d+[a-z]?)(?=$|[\s,;:.)-])/i
+    );
+
+    if (match) {
+      return normalizeBtkPrecinct(match[1]);
+    }
+
+    return null;
+  };
+
+  // ------------------------------------------------------------
+  // Helper: extract DCK sector
+  // ------------------------------------------------------------
+  const extractSector = line => {
+    if (!line) return null;
+
+    const match = line.match(
+      /\b(?:sector|sec)\s*[-:]?\s*(\d+[a-z]?)\b/i
+    );
+
+    return match ? match[1].toUpperCase() : null;
+  };
+
+  // ------------------------------------------------------------
+  // Helper: extract DHA phase
+  // ------------------------------------------------------------
+  const extractPhase = line => {
+    if (!line) return null;
+
+    const match = line.match(
+      /\b(?:phase|ph)\s*[-:]?\s*(\d+[a-z]?)\b/i
+    );
+
+    return match ? match[1].toUpperCase() : null;
+  };
+
+  // ------------------------------------------------------------
+  // Helper: detect road text
+  // Road 03
+  // Road 4-A
+  // Road 12
+  // ------------------------------------------------------------
+  const roadMatchFromLine = line => {
+    if (!line) return '';
+
+    const match = line.match(
+      /\broad\s*[-:]?\s*([0-9]+[a-z]?)(?:\s*[-]?\s*([a-z]))?\b/i
+    );
+
+    if (!match) return '';
+
+    return match[2]
+      ? `${match[1]}-${match[2]}`.toUpperCase()
+      : match[1].toUpperCase();
+  };
+
+  // ------------------------------------------------------------
+  // Helper: identify plot number
+  //
+  // Priority:
+  //
+  // 1. Explicit:
+  //    Plot 240
+  //    Plot #240
+  //
+  // 2. Plot-like values ending with S:
+  //    240s
+  //    1470s
+  //    230s
+  //    160s
+  //
+  // 3. Standalone numeric plot value
+  //
+  // IMPORTANT:
+  // We intentionally avoid taking:
+  // - P15a
+  // - Road 03
+  // - Road 12
+  // - prices
+  // as the plot number.
+  // ------------------------------------------------------------
+  const extractPlotNumber = (line, society) => {
+    if (!line) return '';
+
+    // ----------------------------------------------------------
+    // Explicit "Plot 240", "Plot #240", "Plot No 240"
+    // ----------------------------------------------------------
+    const explicitPlotMatch = line.match(
+      /\b(?:plot|plot\s*#|plot\s*no\.?|plot\s*num(?:ber)?)\s*[:#-]?\s*(\d+[a-z]?)\b/i
+    );
+
+    if (explicitPlotMatch) {
+      return explicitPlotMatch[1].toUpperCase();
+    }
+
+    // ----------------------------------------------------------
+    // Plot suffix "S"
+    //
+    // Examples:
+    // 240s
+    // 1470s
+    // 230s
+    // 160s
+    //
+    // This is especially important for your inventory format.
+    // ----------------------------------------------------------
+    const plotSuffixCandidates = [];
+
+    const suffixRegex = /\b(\d{1,4})\s*s\b/gi;
+
+    let match;
+
+    while ((match = suffixRegex.exec(line)) !== null) {
+      const value = match[1];
+
+      // Ignore obvious road values if immediately preceded by Road.
+      const before = line.substring(
+        Math.max(0, match.index - 10),
+        match.index
+      );
+
+      if (/\broad\s*$/i.test(before)) {
+        continue;
+      }
+
+      plotSuffixCandidates.push(value);
+    }
+
+    if (plotSuffixCandidates.length > 0) {
+      return `${plotSuffixCandidates[0]}S`.toUpperCase();
+    }
+
+    // ----------------------------------------------------------
+    // Remove precinct tokens before searching numeric values.
+    //
+    // Example:
+    // P15a Road 03 1470s
+    //
+    // P15a should NOT become the plot.
+    // ----------------------------------------------------------
+    let searchLine = line
+      .replace(
+        /\bprecinct\s*[-:]?\s*p?\d+[a-z]?\b/gi,
+        ' '
+      )
+      .replace(
+        /(?:^|[\s,;(])p\s*[-:]?\s*\d+[a-z]?(?=$|[\s,;:.)-])/gi,
+        ' '
+      );
+
+    // ----------------------------------------------------------
+    // Remove road tokens.
+    //
+    // Example:
+    // Road 03 1470s
+    //
+    // 03 should NOT become plot number.
+    // ----------------------------------------------------------
+    searchLine = searchLine.replace(
+      /\broad\s*[-:]?\s*\d+[a-z]?(?:\s*[-]?\s*[a-z])?\b/gi,
+      ' '
+    );
+
+    // ----------------------------------------------------------
+    // Remove common price expressions before looking for
+    // numeric plot values.
+    // ----------------------------------------------------------
+    searchLine = searchLine.replace(
+      /\b\d+(?:\.\d+)?\s*(?:lac|lacs|lakh|lakhs|cr|crore|crores|million|m)\b/gi,
+      ' '
+    );
+
+    // ----------------------------------------------------------
+    // Look for an explicit standalone numeric value.
+    // ----------------------------------------------------------
+    const numericCandidates = [];
+
+    const numberRegex = /\b(\d{1,4}[a-z]?)\b/gi;
+
+    while ((match = numberRegex.exec(searchLine)) !== null) {
+      const value = match[1].toUpperCase();
+
+      // Ignore very short road-like values that survived cleanup.
+      if (/^\d{1,2}$/.test(value)) {
+        const before = searchLine.substring(
+          Math.max(0, match.index - 10),
+          match.index
+        );
+
+        if (/\broad\s*$/i.test(before)) {
+          continue;
+        }
+      }
+
+      // Ignore common size values when there is a more
+      // plot-like candidate available.
+      numericCandidates.push(value);
+    }
+
+    // Prefer 3-4 digit numbers for plot numbers.
+    const largerCandidate = numericCandidates.find(
+      value => /^\d{3,4}[A-Z]?$/.test(value)
+    );
+
+    if (largerCandidate) {
+      return largerCandidate;
+    }
+
+    // Fall back to first numeric candidate.
+    if (numericCandidates.length > 0) {
+      return numericCandidates[0];
+    }
+
+    // ----------------------------------------------------------
+    // IMPORTANT:
+    // A commercial/file listing can legitimately have no plot.
+    // Do NOT discard it here.
+    // ----------------------------------------------------------
+    return '';
+  };
+
+  // ------------------------------------------------------------
+  // Process every line
+  // ------------------------------------------------------------
   for (const rawLine of rawLines) {
     const lower = rawLine.toLowerCase();
 
-    // Check header hints to update society context
-    if (lower.includes('bahria town') || lower.includes('btk') || lower.includes('precinct')) {
+    // ----------------------------------------------------------
+    // Society context
+    // ----------------------------------------------------------
+    if (
+      lower.includes('bahria town') ||
+      lower.includes('btk') ||
+      lower.includes('bahria') ||
+      /\bp\d+[a-z]?\b/i.test(rawLine)
+    ) {
       currentSociety = 'BTK';
-    } else if (lower.includes('dha city') || lower.includes('dck') || lower.includes('sector')) {
+    } else if (
+      lower.includes('dha city') ||
+      lower.includes('dck') ||
+      /\bsector\b/i.test(rawLine)
+    ) {
       currentSociety = 'DCK';
-    } else if (lower.includes('dha') || lower.includes('phase') || lower.includes('khayaban')) {
+    } else if (
+      lower.includes('dha') ||
+      /\bphase\b/i.test(rawLine) ||
+      lower.includes('khayaban')
+    ) {
       currentSociety = 'DHA';
     }
 
-    // Check if line is purely a section header (e.g. "Available P16", "P16 Available", "BTK Precinct 16", "DCK Sector 3A", "Phase 6")
-    const precinctHeaderMatch = rawLine.match(/\b(?:available|inventory|list|plots)?\s*(?:precinct|p)\s*[-:]?\s*(\d+[a-z]?)\b/i) || rawLine.match(/\b(?:precinct|p)\s*[-:]?\s*(\d+[a-z]?)\s*(?:available|inventory|list|plots)?\b/i);
-    const sectorHeaderMatch = rawLine.match(/\b(?:sector|sec)\s*[-:]?\s*(\d+[a-z]?)\b/i);
-    const phaseHeaderMatch = rawLine.match(/\b(?:phase|ph)\s*[-:]?\s*(\d+[a-z]?)\b/i);
+    // ----------------------------------------------------------
+    // Check for section/header context
+    // ----------------------------------------------------------
+    const btkPrecinct = extractBtkPrecinct(rawLine);
+    const sector = extractSector(rawLine);
+    const phase = extractPhase(rawLine);
 
-    // If line looks like a section header and contains no individual plot listing descriptors
-    const isHeaderLine = (precinctHeaderMatch || sectorHeaderMatch || phaseHeaderMatch) && !/\b(demand|lacs|cr|corner|west open|park|yard|yards|sqyd|allotment|call|03\d{8,10})\b/i.test(rawLine) && !/^\d+[\.\)]\d+/.test(rawLine);
-    if (isHeaderLine) {
-      if (currentSociety === 'BTK' && precinctHeaderMatch) {
-        const pNum = precinctHeaderMatch[1].toUpperCase();
-        currentPrecinctOrSector = `P${pNum}`;
-        currentLocation = `Precinct ${pNum}`;
-      } else if (currentSociety === 'DCK' && sectorHeaderMatch) {
-        const sec = sectorHeaderMatch[1].toUpperCase();
-        currentPrecinctOrSector = sec;
-        currentLocation = `Sector ${sec}`;
-      } else if (currentSociety === 'DHA' && phaseHeaderMatch) {
-        const ph = phaseHeaderMatch[1].toUpperCase();
-        currentPrecinctOrSector = `Phase ${ph}`;
-        currentLocation = `DHA Phase ${ph}`;
+    const hasListingDescriptor =
+      /\b(demand|lac|lacs|lakh|lakhs|cr|crore|crores|corner|west\s*open|park|yard|yards|sqyd|sq\s*yd|allotment|file|commercial|villa|house|call|paid|non\s*paid|offer|cancel)\b/i.test(
+        rawLine
+      );
+
+    const isPhoneOnly =
+      /^(03\d{2}[- ]?\d{7}|\+92\s*3\d{2}[- ]?\d{7})$/.test(
+        rawLine
+      );
+
+    const looksLikeHeader =
+      !hasListingDescriptor &&
+      !isPhoneOnly &&
+      (
+        btkPrecinct ||
+        sector ||
+        phase
+      );
+
+    if (looksLikeHeader) {
+      if (currentSociety === 'BTK' && btkPrecinct) {
+        currentPrecinctOrSector = btkPrecinct;
+        currentLocation = `Precinct ${btkPrecinct.replace(/^P/, '')}`;
+      } else if (currentSociety === 'DCK' && sector) {
+        currentPrecinctOrSector = sector;
+        currentLocation = `Sector ${sector}`;
+      } else if (currentSociety === 'DHA' && phase) {
+        currentPrecinctOrSector = `Phase ${phase}`;
+        currentLocation = `DHA Phase ${phase}`;
       }
-      continue; // Skip creating a fake plot item for a header line!
-    }
 
-    // Clean leading list index numbers like "1.", "2.", "10.", "1)", "(1)" or "1.1898"
-    let cleanLine = rawLine.replace(/^\s*\(?\d+\)[\.\s-]?\s*/, '').replace(/^\s*\d+[\.\)]\s*/, '').replace(/^\s*\d+\.(?=\d{2,4}[a-z]?\b)/i, '').trim();
-    const cleanLower = cleanLine.toLowerCase();
-
-    // Skip non-plot informational lines (e.g. "All with Allotments", "Demand On Call", "03363754718")
-    if (cleanLine.length < 3 || /^(all with|demand on call|demand|contact|call|allotments|available|nil)\b/i.test(cleanLine) || /^(03\d{2}[- ]?\d{7}|\+92\s*3\d{2}[- ]?\d{7})$/.test(cleanLine)) {
       continue;
     }
 
-    // Extract plot number
-    let plotNumber = '';
-    const explicitPlotMatch = cleanLine.match(/\b(?:plot|#|num|no\.?)\s*[:#-]?\s*(\d+[a-z]?)\b/i);
-    const numPrefixMatch = cleanLine.match(/^(\d{1,4}[a-z]?)\b/i);
-    const anyPlotMatch = cleanLine.match(/\b(\d{2,4}[a-z]?)\b/i);
-    if (explicitPlotMatch) {
-      plotNumber = explicitPlotMatch[1].toUpperCase();
-    } else if (numPrefixMatch) {
-      plotNumber = numPrefixMatch[1].toUpperCase();
-    } else if (anyPlotMatch) {
-      plotNumber = anyPlotMatch[1].toUpperCase();
-    } else {
-      continue; // Skip line if no plot number can be identified
+    // ----------------------------------------------------------
+    // Remove leading list numbers:
+    //
+    // 1. P23...
+    // 2) P15a...
+    // (3) P31...
+    // ----------------------------------------------------------
+    let cleanLine = rawLine
+      .replace(/^\s*\(?\d+\)?[\.\s-]+\s*/, '')
+      .trim();
+
+    const cleanLower = cleanLine.toLowerCase();
+
+    // ----------------------------------------------------------
+    // Skip useless informational lines
+    // ----------------------------------------------------------
+    if (
+      cleanLine.length < 3 ||
+      /^(all with|demand on call|demand|contact|call|allotments|available|nil)\b/i.test(
+        cleanLine
+      ) ||
+      /^(03\d{2}[- ]?\d{7}|\+92\s*3\d{2}[- ]?\d{7})$/.test(
+        cleanLine
+      )
+    ) {
+      continue;
     }
 
-    // Determine society and precinct for this specific line, defaulting to context
+    // ----------------------------------------------------------
+    // Determine society and location for THIS line
+    // ----------------------------------------------------------
     let society = currentSociety;
     let precinctOrSector = currentPrecinctOrSector;
     let location = currentLocation;
-    const linePMatch = cleanLine.match(/\b(precinct|p)\s*[-:]?\s*(\d+[a-z]?)\b/i);
-    const lineSecMatch = cleanLine.match(/\b(sector|sec)\s*[-:]?\s*(\d+[a-z]?)\b/i);
-    const linePhMatch = cleanLine.match(/\b(phase|ph)\s*[-:]?\s*(\d+[a-z]?)\b/i);
-    if (linePMatch) {
+
+    const lineBtkPrecinct = extractBtkPrecinct(cleanLine);
+    const lineSector = extractSector(cleanLine);
+    const linePhase = extractPhase(cleanLine);
+
+    if (lineBtkPrecinct) {
       society = 'BTK';
-      const pNum = linePMatch[2].toUpperCase();
-      precinctOrSector = `P${pNum}`;
+
+      const pNum = lineBtkPrecinct.replace(/^P/, '');
+
+      precinctOrSector = lineBtkPrecinct;
       location = `Precinct ${pNum}`;
-    } else if (lineSecMatch) {
+    } else if (lineSector) {
       society = 'DCK';
-      const sec = lineSecMatch[2].toUpperCase();
-      precinctOrSector = sec;
-      location = `Sector ${sec}`;
-    } else if (linePhMatch) {
+
+      precinctOrSector = lineSector;
+      location = `Sector ${lineSector}`;
+    } else if (linePhase) {
       society = 'DHA';
-      const ph = linePhMatch[2].toUpperCase();
-      precinctOrSector = `Phase ${ph}`;
-      location = `DHA Phase ${ph}`;
+
+      precinctOrSector = `Phase ${linePhase}`;
+      location = `DHA Phase ${linePhase}`;
     }
 
+    // ----------------------------------------------------------
+    // Road
+    // ----------------------------------------------------------
+    const road = roadMatchFromLine(cleanLine);
+
+    // ----------------------------------------------------------
     // Category
+    // ----------------------------------------------------------
     let category = 'Residential';
-    if (cleanLower.includes('commercial') || cleanLower.includes('comm')) {
+
+    if (
+      cleanLower.includes('commercial') ||
+      /\bcomm\b/i.test(cleanLine)
+    ) {
       category = 'Commercial';
-    } else if (cleanLower.includes('villa') || cleanLower.includes('house')) {
+    } else if (
+      cleanLower.includes('villa') ||
+      cleanLower.includes('house')
+    ) {
       category = 'Villa';
-    } else if (cleanLower.includes('apartment') || cleanLower.includes('flat')) {
+    } else if (
+      cleanLower.includes('apartment') ||
+      cleanLower.includes('flat')
+    ) {
       category = 'Apartment';
-    } else if (cleanLower.includes('file')) {
+    } else if (
+      cleanLower.includes('file')
+    ) {
       category = 'Plot File';
     }
 
+    // ----------------------------------------------------------
+    // Plot number
+    // ----------------------------------------------------------
+    const plotNumber = extractPlotNumber(
+      cleanLine,
+      society
+    );
+
+    // ----------------------------------------------------------
+    // SPECIAL RULE:
+    //
+    // A listing with no plot number is still valid if it is
+    // clearly a commercial/file/offer/cancel listing.
+    //
+    // This fixes:
+    //
+    // Midway commercial cancel file for sale
+    // paid amount 97lac
+    // confirm offer required
+    // One call done
+    // ----------------------------------------------------------
+    const isValidWithoutPlot =
+      !plotNumber &&
+      (
+        category === 'Commercial' ||
+        category === 'Plot File' ||
+        /\b(cancel|file|for sale|paid|offer|required)\b/i.test(
+          cleanLine
+        )
+      );
+
+    if (!plotNumber && !isValidWithoutPlot) {
+      // Do not create fake records from random informational text.
+      continue;
+    }
+
+    // ----------------------------------------------------------
     // Size Sqyd
+    // ----------------------------------------------------------
     let sizeSqyd = 250;
-    const sizeMatch = cleanLine.match(/\b(\d{3,4})\s*(sqyd|yd|yards|sq\s*yd|yard)\b/i) || cleanLine.match(/\((\d{3,4})\s*(sqyd|yd|yards|sq\s*yd|yard)?\)/i);
+
+    // 512sq
+    const compactSizeMatch = cleanLine.match(
+      /\b(\d{2,4})\s*(?:sq\.?\s*yd|sqyd|sq\s*yard|sq\s*yards|sq)\b/i
+    );
+
+    // 512 sq yd / 512 yards / 512 yd
+    const normalSizeMatch = cleanLine.match(
+      /\b(\d{2,4})\s*(?:sq\.?\s*yd|sqyd|yd|yards|yard)\b/i
+    );
+
+    const sizeMatch =
+      compactSizeMatch ||
+      normalSizeMatch;
+
     if (sizeMatch) {
       sizeSqyd = parseInt(sizeMatch[1], 10);
-    } else if (cleanLower.includes('125')) sizeSqyd = 125;else if (cleanLower.includes('200')) sizeSqyd = 200;else if (cleanLower.includes('250')) sizeSqyd = 250;else if (cleanLower.includes('350')) sizeSqyd = 350;else if (cleanLower.includes('500')) sizeSqyd = 500;else if (cleanLower.includes('1000') || cleanLower.includes('1 kanal')) sizeSqyd = 1000;else if (cleanLower.includes('2000') || cleanLower.includes('2 kanal')) sizeSqyd = 2000;
+    } else if (/\b125\b/i.test(cleanLine)) {
+      sizeSqyd = 125;
+    } else if (/\b200\b/i.test(cleanLine)) {
+      sizeSqyd = 200;
+    } else if (/\b250\b/i.test(cleanLine)) {
+      sizeSqyd = 250;
+    } else if (/\b350\b/i.test(cleanLine)) {
+      sizeSqyd = 350;
+    } else if (/\b500\b/i.test(cleanLine)) {
+      sizeSqyd = 500;
+    } else if (
+      /\b1000\b/i.test(cleanLine) ||
+      /\b1\s*kanal\b/i.test(cleanLine)
+    ) {
+      sizeSqyd = 1000;
+    } else if (
+      /\b2000\b/i.test(cleanLine) ||
+      /\b2\s*kanal\b/i.test(cleanLine)
+    ) {
+      sizeSqyd = 2000;
+    }
 
+    // ----------------------------------------------------------
     // Price
+    // ----------------------------------------------------------
     const {
       pkr,
       display
     } = parsePriceToPkr(cleanLine);
 
+    // ----------------------------------------------------------
     // Features
+    // ----------------------------------------------------------
     const features = [];
-    if (cleanLower.includes('corner') || cleanLower.includes('semi corner')) features.push('Corner');
-    if (cleanLower.includes('west open') || cleanLower.includes('w/o')) features.push('West Open');
-    if (cleanLower.includes('main') || cleanLower.includes('boulevard') || cleanLower.includes('mb') || cleanLower.includes('jinnah')) features.push('Main Boulevard');
-    if (cleanLower.includes('park') || cleanLower.includes('facing') || cleanLower.includes('pf') || cleanLower.includes('p/f')) features.push('Park Facing');
-    if (cleanLower.includes('possession')) features.push('Possession');
-    if (cleanLower.includes('belted')) features.push('Belted');
-    if (cleanLower.includes('leased')) features.push('Leased');
 
+    if (
+      cleanLower.includes('corner') ||
+      cleanLower.includes('semi corner')
+    ) {
+      features.push('Corner');
+    }
+
+    if (
+      cleanLower.includes('west open') ||
+      /\bw\/o\b/i.test(cleanLine)
+    ) {
+      features.push('West Open');
+    }
+
+    if (
+      cleanLower.includes('main') ||
+      cleanLower.includes('boulevard') ||
+      /\bmb\b/i.test(cleanLine) ||
+      cleanLower.includes('jinnah')
+    ) {
+      features.push('Main Boulevard');
+    }
+
+    if (
+      cleanLower.includes('park') ||
+      cleanLower.includes('facing') ||
+      /\bpf\b/i.test(cleanLine) ||
+      /\bp\/f\b/i.test(cleanLine)
+    ) {
+      features.push('Park Facing');
+    }
+
+    if (cleanLower.includes('possession')) {
+      features.push('Possession');
+    }
+
+    if (cleanLower.includes('belted')) {
+      features.push('Belted');
+    }
+
+    if (cleanLower.includes('leased')) {
+      features.push('Leased');
+    }
+
+    // ----------------------------------------------------------
+    // Status
+    // ----------------------------------------------------------
+    let status = 'Available';
+
+    if (cleanLower.includes('cancel')) {
+      status = 'Cancel File';
+    } else if (
+      cleanLower.includes('non paid') ||
+      cleanLower.includes('non-paid')
+    ) {
+      status = 'Non Paid';
+    } else if (cleanLower.includes('paid')) {
+      status = 'Paid';
+    } else if (cleanLower.includes('allotment')) {
+      status = 'Allotment';
+    }
+
+    // ----------------------------------------------------------
     // Agent phone
-    const linePhoneMatch = cleanLine.match(/(03\d{2}[- ]?\d{7}|\+92\s*3\d{2}[- ]?\d{7})/);
-    const agentPhone = linePhoneMatch ? linePhoneMatch[0] : globalPhone || '0300-1234567';
+    // ----------------------------------------------------------
+    const linePhoneMatch = cleanLine.match(
+      /(03\d{2}[- ]?\d{7}|\+92\s*3\d{2}[- ]?\d{7})/
+    );
 
+    const agentPhone =
+      linePhoneMatch
+        ? linePhoneMatch[0]
+        : globalPhone || '0300-1234567';
+
+    // ----------------------------------------------------------
     // Agent name
+    // ----------------------------------------------------------
     let agentName = 'Karachi Real Estate Agent';
-    if (cleanLower.includes('call') || cleanLower.includes('contact')) {
-      const parts = cleanLine.split(/(?:call|contact|-|:)/i);
-      if (parts.length > 1 && parts[parts.length - 1].length < 30) {
-        agentName = parts[parts.length - 1].replace(/\d+/g, '').trim() || agentName;
+
+    if (
+      cleanLower.includes('call') ||
+      cleanLower.includes('contact')
+    ) {
+      const parts = cleanLine.split(
+        /\b(?:call|contact)\b\s*[:\-]?\s*/i
+      );
+
+      if (
+        parts.length > 1 &&
+        parts[parts.length - 1].length < 30
+      ) {
+        agentName =
+          parts[parts.length - 1]
+            .replace(/\d+/g, '')
+            .trim() ||
+          agentName;
       }
     }
-    const societyName = society === 'BTK' ? 'Bahria Town Karachi' : society === 'DCK' ? 'DHA City Karachi' : 'DHA Karachi';
+
+    // ----------------------------------------------------------
+    // Society name
+    // ----------------------------------------------------------
+    const societyName =
+      society === 'BTK'
+        ? 'Bahria Town Karachi'
+        : society === 'DCK'
+          ? 'DHA City Karachi'
+          : 'DHA Karachi';
+
+    // ----------------------------------------------------------
+    // Final result
+    // ----------------------------------------------------------
     results.push({
       society,
       societyName,
       location,
       precinctOrSector,
+
+      // Blank is allowed for commercial/file listings
       plotNumber,
+
       category,
+
       sizeSqyd,
       sizeDisplay: `${sizeSqyd} Sqyd`,
+
       demandPricePkr: pkr,
       demandDisplay: display,
-      features: features.length > 0 ? features : ['Standard Location'],
-      agentName: agentName || 'Prime Estate Agent',
+
+      features:
+        features.length > 0
+          ? features
+          : ['Standard Location'],
+
+      agentName:
+        agentName || 'Prime Estate Agent',
+
       agentPhone,
-      agencyName: 'Karachi Real Estate Network',
-      status: 'Available',
+
+      agencyName:
+        'Karachi Real Estate Network',
+
+      status,
+
       rawText: rawLine,
-      createdAt: new Date().toISOString(),
+
+      createdAt:
+        new Date().toISOString(),
+
       offers: []
     });
   }
+
   return results;
 }
