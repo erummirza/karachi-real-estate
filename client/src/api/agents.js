@@ -1,5 +1,5 @@
- const BASE_URL = 'https://karachi-real-estate-api.vercel.app/api/agents'; // PRODUCTION - uncomment before deploying
-//const BASE_URL = 'http://localhost:5000/api/agents'; // LOCAL - for testing only
+//const BASE_URL = 'https://karachi-real-estate-api.vercel.app/api/agents'; // PRODUCTION - uncomment before deploying
+const BASE_URL = 'http://localhost:5000/api/agents'; // LOCAL - for testing only
 
 async function handleResponse(res) {
   if (!res.ok) {
@@ -41,22 +41,12 @@ export async function updateAgentStatus(agentId, status) {
   return handleResponse(res);
 }
 
-/** Sign up (set a password) for an already-approved agent, using cell number as username. */
-export async function signupAgent({ contactPhone, password, confirmPassword }) {
-  const res = await fetch(`${BASE_URL}/signup`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contactPhone, password, confirmPassword }),
-  });
-  return handleResponse(res);
-}
-
-/** Log an approved agent in using cell number + password. */
-export async function loginAgent({ contactPhone, password }) {
+/** Log an approved agent in using CNIC/ID Number + Password. */
+export async function loginAgent({ cnicNumber, password }) {
   const res = await fetch(`${BASE_URL}/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contactPhone, password }),
+    body: JSON.stringify({ cnicNumber, password }),
   });
   return handleResponse(res);
 }

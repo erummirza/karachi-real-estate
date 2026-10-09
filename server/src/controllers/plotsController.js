@@ -36,7 +36,31 @@ export async function importPlots(req, res) {
       ownerAgentName: ownerAgentName || null,
     }));
 
-    const inserted = await Plot.insertMany(itemsWithOwner, { ordered: false });
+    let inserted;
+    try {
+      inserted = await Plot.insertMany(itemsWithOwner, { ordered: false });
+    } catch (bulkErr) {
+      // With { ordered: false }, Mongoose/MongoDB keeps inserting the
+      // valid documents even after some fail — those successes are
+      // listed on the error itself. Don't discard them.
+      const partiallyInserted = bulkErr.insertedDocs || [];
+
+      if (partiallyInserted.length > 0) {
+        console.error(
+          `Import: ${partiallyInserted.length}/${itemsWithOwner.length} inserted, rest failed:`,
+          bulkErr.message
+        );
+        return res.status(207).json({
+          items: partiallyInserted,
+          insertedCount: partiallyInserted.length,
+          failedCount: itemsWithOwner.length - partiallyInserted.length,
+          error: bulkErr.message,
+        });
+      }
+
+      throw bulkErr;
+    }
+
     res.status(201).json(inserted);
   } catch (err) {
     console.error('Failed to import plots:', err);

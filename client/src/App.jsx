@@ -12,11 +12,10 @@ import { OfferModal } from './components/OfferModal';
 import { PlotDetailModal } from './components/PlotDetailModal';
 import { WhatsAppExportModal } from './components/WhatsAppExportModal';
 import { AgentRegistrationModal } from './components/AgentRegistrationModal';
-import { AgentSignupModal } from './components/AgentSignupModal';
 import { AgentLoginModal } from './components/AgentLoginModal';
 import { AdminLoginModal } from './components/AdminLoginModal';
 import { AdminPanel } from './components/AdminPanel';
-import { Building2, PlusCircle, RotateCcw, HandCoins, Share2, UserPlus, ShieldCheck, KeyRound, LogIn, Lock } from 'lucide-react';
+import { Building2, PlusCircle, RotateCcw, HandCoins, Share2, UserPlus, ShieldCheck, LogIn, Lock } from 'lucide-react';
 export default function App() {
   // Admin's full inventory - only ever fetched once an admin is authenticated
   const [plots, setPlots] = useState([]);
@@ -85,7 +84,6 @@ export default function App() {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isAgentRegistrationOpen, setIsAgentRegistrationOpen] = useState(false);
-  const [isAgentSignupOpen, setIsAgentSignupOpen] = useState(false);
   const [isAgentLoginOpen, setIsAgentLoginOpen] = useState(false);
   const [loggedInAgent, setLoggedInAgent] = useState(null);
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState(false);
@@ -123,17 +121,35 @@ export default function App() {
   // logged-in agent's own inventory depending on who is currently active.
   const handleImportConfirmed = async newItems => {
     try {
+      let result;
       if (isAdminAuthenticated) {
-        const inserted = await importPlots(newItems);
-        setPlots(prev => [...inserted, ...prev]);
-        showToast(`Successfully imported ${inserted.length} plot listings!`);
+        result = await importPlots(newItems);
       } else if (loggedInAgent) {
-        const inserted = await importPlots(newItems, {
+        result = await importPlots(newItems, {
           ownerAgentId: loggedInAgent.id,
           ownerAgentName: loggedInAgent.fullName
         });
+      } else {
+        return;
+      }
+
+      // A plain array means every item was inserted. An object with
+      // `items` means the batch was inserted with { ordered: false }
+      // and some documents failed validation — the ones that
+      // succeeded are still in `items` and should still be shown.
+      const inserted = Array.isArray(result) ? result : result.items || [];
+      const failedCount = Array.isArray(result) ? 0 : result.failedCount || 0;
+
+      if (isAdminAuthenticated) {
+        setPlots(prev => [...inserted, ...prev]);
+      } else {
         setAgentPlots(prev => [...inserted, ...prev]);
-        showToast(`Added ${inserted.length} listing(s) to your inventory!`);
+      }
+
+      if (failedCount > 0) {
+        showToast(`Imported ${inserted.length} listing(s), ${failedCount} failed validation and were skipped.`);
+      } else {
+        showToast(isAdminAuthenticated ? `Successfully imported ${inserted.length} plot listings!` : `Added ${inserted.length} listing(s) to your inventory!`);
       }
     } catch (e) {
       console.error('Failed to import plots:', e);
@@ -463,10 +479,6 @@ export default function App() {
                   <UserPlus className="w-4 h-4" />
                   <span>Register as Agent</span>
                 </button>
-                <button id="agent-signup-btn" onClick={() => setIsAgentSignupOpen(true)} className="w-full px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5">
-                  <KeyRound className="w-4 h-4" />
-                  <span>Sign Up as Agent</span>
-                </button>
                 <button id="agent-login-btn" onClick={() => setIsAgentLoginOpen(true)} className="w-full px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5">
                   <LogIn className="w-4 h-4" />
                   <span>Agent Sign In</span>
@@ -494,9 +506,7 @@ export default function App() {
 
       <AgentRegistrationModal isOpen={isAgentRegistrationOpen} onClose={() => setIsAgentRegistrationOpen(false)} />
 
-      <AgentSignupModal isOpen={isAgentSignupOpen} onClose={() => setIsAgentSignupOpen(false)} onSwitchToLogin={() => setIsAgentLoginOpen(true)} />
-
-      <AgentLoginModal isOpen={isAgentLoginOpen} onClose={() => setIsAgentLoginOpen(false)} onLoginSuccess={handleAgentLoginSuccess} onSwitchToSignup={() => setIsAgentSignupOpen(true)} />
+      <AgentLoginModal isOpen={isAgentLoginOpen} onClose={() => setIsAgentLoginOpen(false)} onLoginSuccess={handleAgentLoginSuccess} onSwitchToRegister={() => setIsAgentRegistrationOpen(true)} />
 
       <AdminLoginModal isOpen={isAdminLoginOpen} onClose={() => setIsAdminLoginOpen(false)} onLoginSuccess={handleAdminLoginSuccess} />
 

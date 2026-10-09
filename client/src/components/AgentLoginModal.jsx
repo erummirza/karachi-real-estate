@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { LogIn, Loader2 } from 'lucide-react';
 import { loginAgent } from '../api/agents';
 
-export const AgentLoginModal = ({ isOpen, onClose, onLoginSuccess, onSwitchToSignup }) => {
-  const [contactPhone, setContactPhone] = useState('');
+export const AgentLoginModal = ({ isOpen, onClose, onLoginSuccess, onSwitchToRegister }) => {
+  const [cnicNumber, setCnicNumber] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -11,7 +11,7 @@ export const AgentLoginModal = ({ isOpen, onClose, onLoginSuccess, onSwitchToSig
   if (!isOpen) return null;
 
   const handleClose = () => {
-    setContactPhone('');
+    setCnicNumber('');
     setPassword('');
     setError(null);
     onClose();
@@ -19,15 +19,15 @@ export const AgentLoginModal = ({ isOpen, onClose, onLoginSuccess, onSwitchToSig
 
   const handleSubmit = async e => {
     e.preventDefault();
-    if (!contactPhone.trim() || !password) {
-      setError('Please enter your cell number and password.');
+    if (!cnicNumber.trim() || !password) {
+      setError('Please enter your CNIC/ID Number and password.');
       return;
     }
     setError(null);
     setIsSubmitting(true);
     try {
-      const { agent } = await loginAgent({ contactPhone: contactPhone.trim(), password });
-      setContactPhone('');
+      const { agent } = await loginAgent({ cnicNumber: cnicNumber.trim(), password });
+      setCnicNumber('');
       setPassword('');
       onLoginSuccess(agent);
     } catch (err) {
@@ -48,6 +48,7 @@ export const AgentLoginModal = ({ isOpen, onClose, onLoginSuccess, onSwitchToSig
             </div>
             <div>
               <h2 className="text-lg font-bold">Agent Sign In</h2>
+              <p className="text-xs text-slate-400">Use the details from your approved registration</p>
             </div>
           </div>
           <button onClick={handleClose} className="text-slate-400 hover:text-white text-lg font-bold p-1 rounded-lg hover:bg-slate-800 transition-all">
@@ -63,12 +64,12 @@ export const AgentLoginModal = ({ isOpen, onClose, onLoginSuccess, onSwitchToSig
           )}
 
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">Cell Number</label>
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">CNIC / ID Number</label>
             <input
-              type="tel"
-              value={contactPhone}
-              onChange={e => setContactPhone(e.target.value)}
-              placeholder="e.g. 0300-1234567"
+              type="text"
+              value={cnicNumber}
+              onChange={e => setCnicNumber(e.target.value)}
+              placeholder="e.g. 42101-1234567-1"
               className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
               autoFocus
             />
@@ -80,7 +81,7 @@ export const AgentLoginModal = ({ isOpen, onClose, onLoginSuccess, onSwitchToSig
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="••••••"
+              placeholder="Your registration password"
               className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
             />
           </div>
@@ -100,18 +101,18 @@ export const AgentLoginModal = ({ isOpen, onClose, onLoginSuccess, onSwitchToSig
             )}
           </button>
 
-          {onSwitchToSignup && (
+          {onSwitchToRegister && (
             <p className="text-center text-xs text-slate-500">
-              Don't have an account?{' '}
+              Not registered yet?{' '}
               <button
                 type="button"
                 onClick={() => {
                   handleClose();
-                  onSwitchToSignup();
+                  onSwitchToRegister();
                 }}
                 className="text-indigo-600 font-semibold hover:underline"
               >
-                Sign Up
+                Register as Agent
               </button>
             </p>
           )}

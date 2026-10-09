@@ -622,21 +622,29 @@ export function parseInventoryTextClient(rawText) {
     // ----------------------------------------------------------
     let category = 'Residential';
 
+    // "Villa" sometimes just names a nearby community
+    // (e.g. "near sports city villa") rather than describing
+    // the plot itself. When the line is explicitly a "plot"
+    // and villa only shows up after "near", don't tag it Villa.
+    const villaIsLocationName =
+      /\bnear\b[^,.]*\bvillas?\b/i.test(cleanLine) &&
+      /\bplot\b/i.test(cleanLine);
+
     if (
       cleanLower.includes('commercial') ||
       /\bcomm\b/i.test(cleanLine)
     ) {
       category = 'Commercial';
     } else if (
-      cleanLower.includes('villa') ||
-      cleanLower.includes('house')
-    ) {
-      category = 'Villa';
-    } else if (
       cleanLower.includes('apartment') ||
       cleanLower.includes('flat')
     ) {
       category = 'Apartment';
+    } else if (
+      (cleanLower.includes('villa') || cleanLower.includes('house')) &&
+      !villaIsLocationName
+    ) {
+      category = 'Villa';
     } else if (
       cleanLower.includes('file')
     ) {
@@ -682,7 +690,11 @@ export function parseInventoryTextClient(rawText) {
     // ----------------------------------------------------------
     // Size Sqyd
     // ----------------------------------------------------------
-    let sizeSqyd = 250;
+    // No guessed default here on purpose — a bare number in the
+    // text (like a plot # or a price) must never be mistaken for
+    // a size. If no explicit size unit is present, sizeSqyd stays
+    // null and the UI should show it blank for manual entry.
+    let sizeSqyd = null;
 
     // 512sq
     const compactSizeMatch = cleanLine.match(
@@ -694,32 +706,20 @@ export function parseInventoryTextClient(rawText) {
       /\b(\d{2,4})\s*(?:sq\.?\s*yd|sqyd|yd|yards|yard)\b/i
     );
 
+    const kanalMatch = cleanLine.match(/\b(\d{1,2})\s*kanal\b/i);
+    const marlaMatch = cleanLine.match(/\b(\d{1,3})\s*marla\b/i);
+
     const sizeMatch =
       compactSizeMatch ||
       normalSizeMatch;
 
     if (sizeMatch) {
       sizeSqyd = parseInt(sizeMatch[1], 10);
-    } else if (/\b125\b/i.test(cleanLine)) {
-      sizeSqyd = 125;
-    } else if (/\b200\b/i.test(cleanLine)) {
-      sizeSqyd = 200;
-    } else if (/\b250\b/i.test(cleanLine)) {
-      sizeSqyd = 250;
-    } else if (/\b350\b/i.test(cleanLine)) {
-      sizeSqyd = 350;
-    } else if (/\b500\b/i.test(cleanLine)) {
-      sizeSqyd = 500;
-    } else if (
-      /\b1000\b/i.test(cleanLine) ||
-      /\b1\s*kanal\b/i.test(cleanLine)
-    ) {
-      sizeSqyd = 1000;
-    } else if (
-      /\b2000\b/i.test(cleanLine) ||
-      /\b2\s*kanal\b/i.test(cleanLine)
-    ) {
-      sizeSqyd = 2000;
+    } else if (kanalMatch) {
+      // 1 Kanal = 20 Marla = 500 sq. yd
+      sizeSqyd = parseInt(kanalMatch[1], 10) * 500;
+    } else if (marlaMatch) {
+      sizeSqyd = Math.round(parseInt(marlaMatch[1], 10) * 25);
     }
 
     // ----------------------------------------------------------
@@ -804,33 +804,46 @@ export function parseInventoryTextClient(rawText) {
       /(03\d{2}[- ]?\d{7}|\+92\s*3\d{2}[- ]?\d{7})/
     );
 
-    const agentPhone =
-      linePhoneMatch
-        ? linePhoneMatch[0]
-        : globalPhone || '0300-1234567';
+    // Leave blank when no phone is found anywhere in the text —
+    // never invent a placeholder number.
+    const agentPhone = linePhoneMatch
+      ? linePhoneMatch[0]
+      : (globalPhone || '');
 
     // ----------------------------------------------------------
     // Agent name
     // ----------------------------------------------------------
-    let agentName = 'Karachi Real Estate Agent';
+    let agentName = '';
+
+    const genericFillerWords = new Set([
+      'done', 'back', 'required', 'confirm', 'offer',
+      'now', 'only', 'urgent', 'available', 'sale', 'nil'
+    ]);
 
     if (
       cleanLower.includes('call') ||
-      cleanLower.includes('contact')
+      cleanLower.includes('contact') ||
+      cleanLower.includes('agent')
     ) {
       const parts = cleanLine.split(
-        /\b(?:call|contact)\b\s*[:\-]?\s*/i
+        /\b(?:call|contact|agent)\b\s*[:\-]?\s*/i
       );
 
-      if (
-        parts.length > 1 &&
-        parts[parts.length - 1].length < 30
-      ) {
-        agentName =
-          parts[parts.length - 1]
-            .replace(/\d+/g, '')
-            .trim() ||
-          agentName;
+      if (parts.length > 1) {
+        const candidate = parts[parts.length - 1]
+          .replace(/\d+/g, '')
+          .replace(/[^a-zA-Z .]/g, '')
+          .trim();
+
+        const looksLikeARealName =
+          candidate.length >= 3 &&
+          candidate.length < 30 &&
+          /^[a-zA-Z][a-zA-Z .]*$/.test(candidate) &&
+          !genericFillerWords.has(candidate.toLowerCase());
+
+        if (looksLikeARealName) {
+          agentName = candidate;
+        }
       }
     }
 
@@ -859,7 +872,7 @@ export function parseInventoryTextClient(rawText) {
       category,
 
       sizeSqyd,
-      sizeDisplay: `${sizeSqyd} Sqyd`,
+      sizeDisplay: sizeSqyd ? `${sizeSqyd} Sqyd` : '',
 
       demandPricePkr: pkr,
       demandDisplay: display,
@@ -869,8 +882,7 @@ export function parseInventoryTextClient(rawText) {
           ? features
           : ['Standard Location'],
 
-      agentName:
-        agentName || 'Prime Estate Agent',
+      agentName,
 
       agentPhone,
 

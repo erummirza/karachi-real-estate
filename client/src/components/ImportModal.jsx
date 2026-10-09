@@ -99,15 +99,15 @@ export const ImportModal = ({
     societyName: item.societyName || (item.society === 'DCK' ? 'DHA City Karachi' : item.society === 'DHA' ? 'DHA Karachi' : 'Bahria Town Karachi'),
     location: item.location || 'Precinct 1',
     precinctOrSector: item.precinctOrSector || 'P1',
-    plotNumber: item.plotNumber || '101',
+    plotNumber: item.plotNumber || '',
     category: item.category || 'Residential',
-    sizeSqyd: item.sizeSqyd || 250,
-    sizeDisplay: item.sizeDisplay || `${item.sizeSqyd || 250} Sqyd`,
-    demandPricePkr: item.demandPricePkr || 5000000,
-    demandDisplay: item.demandDisplay || '50 Lacs',
+    sizeSqyd: item.sizeSqyd || null,
+    sizeDisplay: item.sizeSqyd ? item.sizeDisplay || `${item.sizeSqyd} Sqyd` : '',
+    demandPricePkr: item.demandPricePkr || 0,
+    demandDisplay: item.demandPricePkr ? item.demandDisplay || '' : (item.demandDisplay || 'Price on Call'),
     features: item.features && item.features.length > 0 ? item.features : ['Standard Location'],
-    agentName: item.agentName || 'Agent Direct',
-    agentPhone: item.agentPhone || '0300-0000000',
+    agentName: item.agentName || '',
+    agentPhone: item.agentPhone || '',
     agencyName: item.agencyName || 'Karachi Real Estate',
     status: 'Available',
     notes: item.notes || '',
@@ -268,10 +268,10 @@ DHA Phase 6 plot 142 500yd demand 8.5 Crore`} className="w-full p-3.5 bg-slate-5
 
                         {/* Size */}
                         <td className="p-2">
-                          <input type="number" value={item.sizeSqyd || 250} onChange={e => {
-                      const sz = Number(e.target.value);
+                          <input type="number" value={item.sizeSqyd ?? ''} placeholder="—" onChange={e => {
+                      const sz = e.target.value === '' ? null : Number(e.target.value);
                       updateItemField(idx, 'sizeSqyd', sz);
-                      updateItemField(idx, 'sizeDisplay', `${sz} Sqyd`);
+                      updateItemField(idx, 'sizeDisplay', sz ? `${sz} Sqyd` : '');
                     }} className="p-1 w-16 bg-slate-50 border border-slate-300 rounded text-xs" />
                           <span className="text-[10px] text-slate-500 ml-1">yd</span>
                         </td>

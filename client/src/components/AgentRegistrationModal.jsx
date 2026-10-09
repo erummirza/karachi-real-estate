@@ -6,12 +6,13 @@ const EMPTY_FORM = {
   fullName: '',
   cnicNumber: '',
   contactPhone: '',
+  password: '',
+  confirmPassword: '',
   agencyName: '',
   operatingCity: '',
-  licenseCredentials: '',
 };
 
-const REQUIRED_FIELDS = ['fullName', 'cnicNumber', 'contactPhone', 'agencyName', 'operatingCity'];
+const REQUIRED_FIELDS = ['fullName', 'cnicNumber', 'contactPhone', 'password', 'confirmPassword', 'agencyName', 'operatingCity'];
 
 export const AgentRegistrationModal = ({ isOpen, onClose }) => {
   const [form, setForm] = useState(EMPTY_FORM);
@@ -25,18 +26,29 @@ export const AgentRegistrationModal = ({ isOpen, onClose }) => {
     setForm(prev => ({ ...prev, [field]: value }));
   };
 
-  const isFormValid = REQUIRED_FIELDS.every(field => form[field].trim().length > 0);
+  const isFormValid = REQUIRED_FIELDS.every(field => form[field].trim().length > 0)
+    && form.password.length >= 6
+    && form.password === form.confirmPassword;
 
   const handleSubmit = async e => {
     e.preventDefault();
-    if (!isFormValid) {
+    if (!REQUIRED_FIELDS.every(field => form[field].trim().length > 0)) {
       setError('Please fill in all required fields.');
+      return;
+    }
+    if (form.password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+    if (form.password !== form.confirmPassword) {
+      setError('Passwords do not match.');
       return;
     }
     setError(null);
     setIsSubmitting(true);
     try {
-      await registerAgent(form);
+      const { confirmPassword, ...payload } = form;
+      await registerAgent(payload);
       setSubmitted(true);
     } catch (err) {
       setError(err.message || 'Failed to submit registration. Please try again.');
@@ -111,6 +123,16 @@ export const AgentRegistrationModal = ({ isOpen, onClose }) => {
             </div>
 
             <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">Password</label>
+              <input type="password" value={form.password} onChange={e => updateField('password', e.target.value)} placeholder="At least 6 characters" className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">Confirm Password</label>
+              <input type="password" value={form.confirmPassword} onChange={e => updateField('confirmPassword', e.target.value)} placeholder="Re-enter your password" className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+            </div>
+
+            <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">Agency Name</label>
               <input type="text" value={form.agencyName} onChange={e => updateField('agencyName', e.target.value)} placeholder="e.g. Karachi Real Estate Co." className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
             </div>
@@ -118,11 +140,6 @@ export const AgentRegistrationModal = ({ isOpen, onClose }) => {
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">Operating City / Location</label>
               <input type="text" value={form.operatingCity} onChange={e => updateField('operatingCity', e.target.value)} placeholder="e.g. Karachi" className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">License Credentials <span className="text-slate-400 normal-case font-medium">(Optional)</span></label>
-              <input type="text" value={form.licenseCredentials} onChange={e => updateField('licenseCredentials', e.target.value)} placeholder="e.g. Real Estate License #12345" className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-2">

@@ -104,7 +104,6 @@ export const AdminPanel = ({ isOpen, onClose, onLogout }) => {
                     <th className="p-2.5">Phone</th>
                     <th className="p-2.5">Agency</th>
                     <th className="p-2.5">City</th>
-                    <th className="p-2.5">License</th>
                     <th className="p-2.5">Status</th>
                     <th className="p-2.5 text-center">Action</th>
                   </tr>
@@ -117,7 +116,6 @@ export const AdminPanel = ({ isOpen, onClose, onLogout }) => {
                       <td className="p-2.5 font-mono text-slate-700">{agent.contactPhone}</td>
                       <td className="p-2.5 text-slate-700">{agent.agencyName}</td>
                       <td className="p-2.5 text-slate-700">{agent.operatingCity}</td>
-                      <td className="p-2.5 text-slate-700">{agent.licenseCredentials}</td>
                       <td className="p-2.5">
                         <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${STATUS_STYLES[agent.status]}`}>
                           {agent.status}
